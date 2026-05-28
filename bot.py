@@ -1,6 +1,35 @@
-
 import requests
 import time
+
+# =========================
+# TELEGRAM SETTINGS
+# =========================
+
+TOKEN = "8871701058:AAEdXKgLcJGznFY4NA-Rc2WoqgKsjvUsYkY"
+CHAT_ID = "6384233386"
+
+# =========================
+# SEND TELEGRAM
+# =========================
+
+def send_telegram(message):
+
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+
+    data = {
+        "chat_id": CHAT_ID,
+        "text": message
+    }
+
+    try:
+        requests.post(url, data=data)
+    except Exception as e:
+        print("TELEGRAM ERROR:", e)
+
+# =========================
+# GET KLINES FROM BINANCE
+# =========================
+
 def get_klines(symbol):
 
     url = (
@@ -11,59 +40,6 @@ def get_klines(symbol):
     response = requests.get(url)
 
     return response.json()
-# =========================
-# CONFIG
-# =========================
-
-API_KEY = "vfaCeckzusrSoZHjL3v0r5ixi4zG8AG2yX3atfJAzpQf1QeKfFzAV8XRDu0EBTID"
-API_SECRET = "4MxCLa2SuSfeaVBaxpYJB818iVeQJTsQBpxiACAhWHRa0pVxsjiaThtn3wX3xkuz"
-
-TOKEN = "8871701058:AAEdXKgLcJGznFY4NA-Rc2WoqgKsjvUsYkY"
-CHAT_ID = "6384233386"
-
-
-
-# =========================
-# TELEGRAM
-# =========================
-
-def send_telegram(message):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-
-    requests.post(url, data={
-        "chat_id": CHAT_ID,
-        "text": message
-    })
-
-# =========================
-# GET SPOT SYMBOLS (FILTERED)
-# =========================
-
-def get_spot_symbols():
-    exchange_info = client.get_exchange_info()
-    tickers = client.get_ticker()
-
-    volume_map = {t['symbol']: float(t['quoteVolume']) for t in tickers}
-
-    symbols = []
-
-    for s in exchange_info['symbols']:
-        if (
-            s['status'] == 'TRADING' and
-            s['quoteAsset'] == 'USDT' and
-            s['isSpotTradingAllowed']
-        ):
-            if volume_map.get(s['symbol'], 0) > 1000000:
-                symbols.append(s['symbol'])
-
-    return symbols
-
-# =========================
-# COOLDOWN SYSTEM
-# =========================
-
-last_signal_time = {}
-COOLDOWN = 3600
 
 # =========================
 # ANALYZE MARKET
@@ -71,27 +47,30 @@ COOLDOWN = 3600
 
 def analyze(symbol):
 
+    print(f"ANALYZING {symbol}")
+
     candles = get_klines(symbol)
 
+    if not candles or isinstance(candles, dict):
+        print("ERROR LOADING DATA")
+        return
+
     closes = []
-    volumes = []
 
-    for c in candles:
-        closes.append(float(c[4]))
-        volumes.append(float(c[5]))
+    for candle in candles:
+        closes.append(float(candle[4]))
 
-    entry = closes[-1]
+    current_price = closes[-1]
 
-    # =========================
-    # INDICATORS
-    # =========================
-
+    # EMA
     ema = sum(closes[-20:]) / 20
 
+    # RSI
     gains = []
     losses = []
 
     for i in range(1, len(closes)):
+
         diff = closes[i] - closes[i - 1]
 
         if diff >= 0:
@@ -105,93 +84,98 @@ def analyze(symbol):
     rs = avg_gain / avg_loss
     rsi = 100 - (100 / (1 + rs))
 
+    # VOLUME
+    volumes = []
+
+    for candle in candles:
+        volumes.append(float(candle[5]))
+
     current_volume = volumes[-1]
     avg_volume = sum(volumes[-20:]) / 20
 
     volume_spike = current_volume > avg_volume * 1.5
     smart_money = current_volume > avg_volume * 2
 
+    print("PRICE:", current_price)
+    print("EMA:", ema)
+    print("RSI:", rsi)
+
     # =========================
-    # STRONG SIGNAL FILTER
+    # BUY CONDITIONS
     # =========================
 
     if (
-        entry > ema and
-        rsi < 70 and
-        volume_spike and
-        smart_money
+        current_price > ema
+        and rsi > 45
+        and volume_spike
     ):
 
-        # cooldown
-        now = time.time()
+        entry = round(current_price, 4)
 
-        if symbol in last_signal_time:
-            if now - last_signal_time[symbol] < COOLDOWN:
-                return
+        tp = round(current_price * 1.04, 4)
 
-        last_signal_time[symbol] = now
-
-        # =========================
-        # SMART TP / SL FIX
-        # =========================
-
-        # dynamic precision (important fix)
-        if entry < 1:
-            tp = entry * 1.05
-            sl = entry * 0.98
-        else:
-            tp = entry * 1.03
-            sl = entry * 0.985
-
-        entry_low = entry * 0.998
-        entry_high = entry * 1.002
-
-        # =========================
-        # MESSAGE
-        # =========================
+        sl = round(current_price * 0.985, 4)
 
         message = (
             f"🚀 STRONG BUY SIGNAL\n\n"
             f"PAIR: {symbol}\n\n"
-            f"📍 ENTRY ZONE: {round(entry_low,6)} - {round(entry_high,6)}\n"
-            f"📌 ENTRY: {round(entry,6)}\n\n"
-            f"📊 EMA: {round(ema,6)}\n"
+            f"📍 ENTRY: {entry}\n\n"
+            f"📊 EMA: {round(ema,4)}\n"
             f"📈 RSI: {round(rsi,2)}\n"
             f"📊 VOLUME SPIKE: {volume_spike}\n"
             f"🐋 SMART MONEY: {smart_money}\n\n"
-            f"🎯 TP: {round(tp,6)}\n"
-            f"🛑 SL: {round(sl,6)}\n"
+            f"🎯 TP: {tp}\n"
+            f"🛑 SL: {sl}"
         )
 
-        print(f"SIGNAL SENT: {symbol}")
+        print("SENDING SIGNAL...")
+
         send_telegram(message)
+
+        print("SIGNAL SENT")
+
+# =========================
+# SYMBOLS
+# =========================
+
+symbols = [
+    "BTCUSDT",
+    "ETHUSDT",
+    "SOLUSDT",
+    "BNBUSDT",
+    "XRPUSDT"
+]
 
 # =========================
 # START BOT
 # =========================
 
-print("🚀 BOT STARTED")
+print("BOT STARTED")
 
-send_telegram("🔥 SMART TRADING BOT STARTED")
-
-symbols = get_spot_symbols()
-
-print("TOTAL SYMBOLS:", len(symbols))
+send_telegram("🔥 BOT STARTED SUCCESSFULLY")
 
 # =========================
 # MAIN LOOP
 # =========================
 
 while True:
-    try:
-        for symbol in symbols:
-            analyze(symbol)
-            time.sleep(1.2)
 
-        print("WAITING NEXT CYCLE...")
-        time.sleep(30)
+    try:
+
+        for symbol in symbols:
+
+            analyze(symbol)
+
+            time.sleep(10)
+
+        print("WAITING NEXT SCAN...")
+
+        time.sleep(300)
 
     except Exception as e:
+
         print("ERROR:", e)
+
         send_telegram(f"ERROR: {e}")
-        time.sleep(10)
+
+        time.sleep(30)
