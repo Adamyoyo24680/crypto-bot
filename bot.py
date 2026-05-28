@@ -22,78 +22,24 @@ def send_telegram(message):
     }
 
     try:
-        requests.post(url, data=data)
+
+        requests.post(url, data=data, timeout=10)
 
     except Exception as e:
+
         print("TELEGRAM ERROR:", e)
 
 # =========================
-# GET SPOT SYMBOLS
+# COINS
 # =========================
 
-def get_spot_symbols():
-
-    try:
-
-        url = "https://api.binance.com/api/v3/exchangeInfo"
-
-        response = requests.get(url, timeout=10)
-
-        data = response.json()
-
-        # لو Binance رجع Error
-        if "symbols" not in data:
-
-            print("BINANCE ERROR:", data)
-
-            return [
-                "BTCUSDT",
-                "ETHUSDT",
-                "SOLUSDT",
-                "BNBUSDT",
-                "XRPUSDT"
-            ]
-
-        symbols = []
-
-        for s in data["symbols"]:
-
-            try:
-
-                if (
-                    s["quoteAsset"] == "USDT"
-                    and s["status"] == "TRADING"
-                    and s["isSpotTradingAllowed"]
-                ):
-
-                    symbol = s["symbol"]
-
-                    # فلترة العملات الغريبة
-                    if (
-                        "UP" not in symbol
-                        and "DOWN" not in symbol
-                        and "BULL" not in symbol
-                        and "BEAR" not in symbol
-                    ):
-
-                        symbols.append(symbol)
-
-            except:
-                pass
-
-        return symbols
-
-    except Exception as e:
-
-        print("GET SYMBOLS ERROR:", e)
-
-        return [
-            "BTCUSDT",
-            "ETHUSDT",
-            "SOLUSDT",
-            "BNBUSDT",
-            "XRPUSDT"
-        ]
+symbols = [
+    "BTCUSDT",
+    "ETHUSDT",
+    "SOLUSDT",
+    "BNBUSDT",
+    "XRPUSDT"
+]
 
 # =========================
 # GET KLINES
@@ -110,7 +56,9 @@ def get_klines(symbol):
 
         response = requests.get(url, timeout=10)
 
-        return response.json()
+        data = response.json()
+
+        return data
 
     except Exception as e:
 
@@ -124,109 +72,115 @@ def get_klines(symbol):
 
 def analyze(symbol):
 
-    print(f"ANALYZING {symbol}")
+    try:
 
-    candles = get_klines(symbol)
+        print(f"ANALYZING {symbol}")
 
-    if not candles:
-        return
+        candles = get_klines(symbol)
 
-    if isinstance(candles, dict):
-        return
+        if not candles:
+            return
 
-    closes = []
+        if isinstance(candles, dict):
+            print("BAD RESPONSE:", candles)
+            return
 
-    for candle in candles:
+        closes = []
 
-        closes.append(float(candle[4]))
+        for candle in candles:
 
-    current_price = closes[-1]
+            closes.append(float(candle[4]))
 
-    # =========================
-    # EMA
-    # =========================
+        current_price = closes[-1]
 
-    ema = sum(closes[-20:]) / 20
+        # =========================
+        # EMA
+        # =========================
 
-    # =========================
-    # RSI
-    # =========================
+        ema = sum(closes[-20:]) / 20
 
-    gains = []
-    losses = []
+        # =========================
+        # RSI
+        # =========================
 
-    for i in range(1, len(closes)):
+        gains = []
+        losses = []
 
-        diff = closes[i] - closes[i - 1]
+        for i in range(1, len(closes)):
 
-        if diff >= 0:
-            gains.append(diff)
+            diff = closes[i] - closes[i - 1]
 
-        else:
-            losses.append(abs(diff))
+            if diff >= 0:
 
-    avg_gain = sum(gains[-14:]) / 14 if gains else 0.01
+                gains.append(diff)
 
-    avg_loss = sum(losses[-14:]) / 14 if losses else 0.01
+            else:
 
-    rs = avg_gain / avg_loss
+                losses.append(abs(diff))
 
-    rsi = 100 - (100 / (1 + rs))
+        avg_gain = sum(gains[-14:]) / 14 if gains else 0.01
 
-    # =========================
-    # VOLUME
-    # =========================
+        avg_loss = sum(losses[-14:]) / 14 if losses else 0.01
 
-    volumes = []
+        rs = avg_gain / avg_loss
 
-    for candle in candles:
+        rsi = 100 - (100 / (1 + rs))
 
-        volumes.append(float(candle[5]))
+        # =========================
+        # VOLUME
+        # =========================
 
-    current_volume = volumes[-1]
+        volumes = []
 
-    avg_volume = sum(volumes[-20:]) / 20
+        for candle in candles:
 
-    volume_spike = current_volume > avg_volume * 1.3
+            volumes.append(float(candle[5]))
 
-    smart_money = current_volume > avg_volume * 2
+        current_volume = volumes[-1]
 
-    print("PRICE:", current_price)
-    print("EMA:", round(ema, 6))
-    print("RSI:", round(rsi, 2))
+        avg_volume = sum(volumes[-20:]) / 20
 
-    # =========================
-    # BUY CONDITIONS
-    # =========================
+        volume_spike = current_volume > avg_volume * 1.3
 
-    if (
-        current_price > ema
-        and rsi > 40
-    ):
+        smart_money = current_volume > avg_volume * 2
 
-        entry = round(current_price, 6)
+        print("PRICE:", current_price)
+        print("EMA:", round(ema, 6))
+        print("RSI:", round(rsi, 2))
 
-        tp = round(current_price * 1.04, 6)
+        # =========================
+        # SIGNAL CONDITIONS
+        # =========================
 
-        sl = round(current_price * 0.985, 6)
+        if current_price > ema and rsi > 40:
 
-        message = (
-            f"🚀 STRONG BUY SIGNAL\n\n"
-            f"PAIR: {symbol}\n\n"
-            f"📍 ENTRY: {entry}\n\n"
-            f"📊 EMA: {round(ema,6)}\n"
-            f"📈 RSI: {round(rsi,2)}\n"
-            f"📊 VOLUME SPIKE: {volume_spike}\n"
-            f"🐋 SMART MONEY: {smart_money}\n\n"
-            f"🎯 TP: {tp}\n"
-            f"🛑 SL: {sl}"
-        )
+            entry = round(current_price, 6)
 
-        print("SENDING SIGNAL...")
+            tp = round(current_price * 1.04, 6)
 
-        send_telegram(message)
+            sl = round(current_price * 0.985, 6)
 
-        print("SIGNAL SENT")
+            message = (
+                f"🚀 STRONG BUY SIGNAL\n\n"
+                f"PAIR: {symbol}\n\n"
+                f"📍 ENTRY: {entry}\n\n"
+                f"📊 EMA: {round(ema,6)}\n"
+                f"📈 RSI: {round(rsi,2)}\n"
+                f"📊 VOLUME SPIKE: {volume_spike}\n"
+                f"🐋 SMART MONEY: {smart_money}\n\n"
+                f"🎯 TP: {tp}\n"
+                f"🛑 SL: {sl}"
+            )
+
+            print("SENDING SIGNAL...")
+
+            send_telegram(message)
+
+            print("SIGNAL SENT")
+
+    except Exception as e:
+
+        print(f"ANALYZE ERROR {symbol}: {e}")
 
 # =========================
 # START BOT
@@ -235,14 +189,6 @@ def analyze(symbol):
 print("🚀 BOT STARTED")
 
 send_telegram("🔥 BOT STARTED SUCCESSFULLY")
-
-# =========================
-# LOAD SYMBOLS
-# =========================
-
-symbols = get_spot_symbols()
-
-print(f"TOTAL SYMBOLS: {len(symbols)}")
 
 # =========================
 # MAIN LOOP
@@ -254,15 +200,9 @@ while True:
 
         for symbol in symbols:
 
-            try:
+            analyze(symbol)
 
-                analyze(symbol)
-
-                time.sleep(3)
-
-            except Exception as e:
-
-                print(f"ERROR ANALYZING {symbol}: {e}")
+            time.sleep(5)
 
         print("WAITING NEXT SCAN...")
 
@@ -271,8 +211,8 @@ while True:
 
     except Exception as e:
 
-        print("MAIN ERROR:", e)
+        print("MAIN LOOP ERROR:", e)
 
-        send_telegram(f"MAIN ERROR: {e}")
+        send_telegram(f"MAIN LOOP ERROR: {e}")
 
         time.sleep(30)
