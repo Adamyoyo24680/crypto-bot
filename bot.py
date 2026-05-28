@@ -47,24 +47,39 @@ symbols = [
 
 def get_klines(symbol):
 
-    try:
+    urls = [
+        "https://api1.binance.com",
+        "https://api2.binance.com",
+        "https://api3.binance.com"
+    ]
 
-        url = (
-            f"https://api.binance.com/api/v3/klines"
-            f"?symbol={symbol}&interval=15m&limit=50"
-        )
+    for base_url in urls:
 
-        response = requests.get(url, timeout=10)
+        try:
 
-        data = response.json()
+            url = (
+                f"{base_url}/api/v3/klines"
+                f"?symbol={symbol}&interval=15m&limit=50"
+            )
 
-        return data
+            response = requests.get(url, timeout=10)
 
-    except Exception as e:
+            data = response.json()
 
-        print(f"KLINES ERROR {symbol}: {e}")
+            # لو البيانات صحيحة
+            if isinstance(data, list):
 
-        return None
+                return data
+
+            else:
+
+                print("BAD RESPONSE:", data)
+
+        except Exception as e:
+
+            print(f"API ERROR {base_url}: {e}")
+
+    return None
 
 # =========================
 # ANALYZE MARKET
@@ -74,15 +89,14 @@ def analyze(symbol):
 
     try:
 
-        print(f"ANALYZING {symbol}")
+        print(f"\nANALYZING {symbol}")
 
         candles = get_klines(symbol)
 
         if not candles:
-            return
 
-        if isinstance(candles, dict):
-            print("BAD RESPONSE:", candles)
+            print("NO DATA")
+
             return
 
         closes = []
@@ -144,9 +158,15 @@ def analyze(symbol):
 
         smart_money = current_volume > avg_volume * 2
 
+        # =========================
+        # LOGS
+        # =========================
+
         print("PRICE:", current_price)
         print("EMA:", round(ema, 6))
         print("RSI:", round(rsi, 2))
+        print("VOLUME SPIKE:", volume_spike)
+        print("SMART MONEY:", smart_money)
 
         # =========================
         # SIGNAL CONDITIONS
@@ -178,6 +198,10 @@ def analyze(symbol):
 
             print("SIGNAL SENT")
 
+        else:
+
+            print("NO SIGNAL")
+
     except Exception as e:
 
         print(f"ANALYZE ERROR {symbol}: {e}")
@@ -204,7 +228,7 @@ while True:
 
             time.sleep(5)
 
-        print("WAITING NEXT SCAN...")
+        print("\nWAITING NEXT SCAN...\n")
 
         # كل 5 دقائق
         time.sleep(300)
