@@ -9,7 +9,7 @@ TOKEN = "8871701058:AAEdXKgLcJGznFY4NA-Rc2WoqgKsjvUsYkY"
 CHAT_ID = "6384233386"
 
 # =========================
-# SEND TELEGRAM MESSAGE
+# SEND TELEGRAM
 # =========================
 
 def send_telegram(message):
@@ -23,6 +23,7 @@ def send_telegram(message):
 
     try:
         requests.post(url, data=data)
+
     except Exception as e:
         print("TELEGRAM ERROR:", e)
 
@@ -32,40 +33,67 @@ def send_telegram(message):
 
 def get_spot_symbols():
 
-    url = "https://api.binance.com/api/v3/exchangeInfo"
+    try:
 
-    response = requests.get(url)
+        url = "https://api.binance.com/api/v3/exchangeInfo"
 
-    exchange_info = response.json()
+        response = requests.get(url, timeout=10)
 
-    symbols = []
+        data = response.json()
 
-    for s in exchange_info["symbols"]:
+        # لو Binance رجع Error
+        if "symbols" not in data:
 
-        try:
+            print("BINANCE ERROR:", data)
 
-            if (
-                s["quoteAsset"] == "USDT"
-                and s["status"] == "TRADING"
-                and s["isSpotTradingAllowed"]
-            ):
+            return [
+                "BTCUSDT",
+                "ETHUSDT",
+                "SOLUSDT",
+                "BNBUSDT",
+                "XRPUSDT"
+            ]
 
-                symbol = s["symbol"]
+        symbols = []
 
-                # فلترة العملات الغريبة
+        for s in data["symbols"]:
+
+            try:
+
                 if (
-                    "UP" not in symbol
-                    and "DOWN" not in symbol
-                    and "BULL" not in symbol
-                    and "BEAR" not in symbol
+                    s["quoteAsset"] == "USDT"
+                    and s["status"] == "TRADING"
+                    and s["isSpotTradingAllowed"]
                 ):
 
-                    symbols.append(symbol)
+                    symbol = s["symbol"]
 
-        except:
-            pass
+                    # فلترة العملات الغريبة
+                    if (
+                        "UP" not in symbol
+                        and "DOWN" not in symbol
+                        and "BULL" not in symbol
+                        and "BEAR" not in symbol
+                    ):
 
-    return symbols
+                        symbols.append(symbol)
+
+            except:
+                pass
+
+        return symbols
+
+    except Exception as e:
+
+        print("GET SYMBOLS ERROR:", e)
+
+        return [
+            "BTCUSDT",
+            "ETHUSDT",
+            "SOLUSDT",
+            "BNBUSDT",
+            "XRPUSDT"
+        ]
 
 # =========================
 # GET KLINES
@@ -73,14 +101,22 @@ def get_spot_symbols():
 
 def get_klines(symbol):
 
-    url = (
-        f"https://api.binance.com/api/v3/klines"
-        f"?symbol={symbol}&interval=15m&limit=50"
-    )
+    try:
 
-    response = requests.get(url)
+        url = (
+            f"https://api.binance.com/api/v3/klines"
+            f"?symbol={symbol}&interval=15m&limit=50"
+        )
 
-    return response.json()
+        response = requests.get(url, timeout=10)
+
+        return response.json()
+
+    except Exception as e:
+
+        print(f"KLINES ERROR {symbol}: {e}")
+
+        return None
 
 # =========================
 # ANALYZE MARKET
@@ -92,7 +128,6 @@ def analyze(symbol):
 
     candles = get_klines(symbol)
 
-    # حماية من الأخطاء
     if not candles:
         return
 
@@ -156,8 +191,12 @@ def analyze(symbol):
 
     smart_money = current_volume > avg_volume * 2
 
+    print("PRICE:", current_price)
+    print("EMA:", round(ema, 6))
+    print("RSI:", round(rsi, 2))
+
     # =========================
-    # CONDITIONS
+    # BUY CONDITIONS
     # =========================
 
     if (
@@ -227,6 +266,7 @@ while True:
 
         print("WAITING NEXT SCAN...")
 
+        # كل 5 دقائق
         time.sleep(300)
 
     except Exception as e:
