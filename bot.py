@@ -1,7 +1,16 @@
-from binance.client import Client
+
 import requests
 import time
+def get_klines(symbol):
 
+    url = (
+        f"https://api.binance.com/api/v3/klines"
+        f"?symbol={symbol}&interval=15m&limit=50"
+    )
+
+    response = requests.get(url)
+
+    return response.json()
 # =========================
 # CONFIG
 # =========================
@@ -12,7 +21,7 @@ API_SECRET = "4MxCLa2SuSfeaVBaxpYJB818iVeQJTsQBpxiACAhWHRa0pVxsjiaThtn3wX3xkuz"
 TOKEN = "8871701058:AAEdXKgLcJGznFY4NA-Rc2WoqgKsjvUsYkY"
 CHAT_ID = "6384233386"
 
-client = Client(API_KEY, API_SECRET)
+
 
 # =========================
 # TELEGRAM
@@ -62,11 +71,7 @@ COOLDOWN = 3600
 
 def analyze(symbol):
 
-    candles = client.get_klines(
-        symbol=symbol,
-        interval="15m",
-        limit=50
-    )
+    candles = get_klines(symbol)
 
     closes = []
     volumes = []
